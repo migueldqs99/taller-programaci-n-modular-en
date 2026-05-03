@@ -1,0 +1,300 @@
+#include <iostream>
+#include <iomanip>
+#include <string>
+#include <algorithm>
+#include <vector>
+#include <cctype>
+#include <limits>
+
+using namespace std;
+
+struct Equipo {
+    string nombre;
+    int partidosJugados;
+    int partidosGanados;
+    int partidosEmpatados;
+    int partidosPerdidos;
+    int puntos;
+};
+
+const int INICIALES = 16;
+const int MAX_NUEVOS = 4;
+const int MAX_EQUIPOS = INICIALES + MAX_NUEVOS;
+
+// ------------------ Utilidades ------------------
+static string aMinusculas(string s) {
+    for (char &c : s) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+    return s;
+}
+
+static int leerEnteroNoNeg(const string& msg) {
+    int x;
+    while (true) {
+        cout << msg;
+        if (cin >> x && x >= 0) return x;
+        cout << "❌ Entrada inválida. Introduce un entero >= 0.\n";
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    }
+}
+
+static int leerOpcionEnRango(const string& msg, int minOp, int maxOp) {
+    int op;
+    while (true) {
+        cout << msg;
+        if (cin >> op && op >= minOp && op <= maxOp) return op;
+        cout << "❌ Opción inválida.\n";
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    }
+}
+
+static string leerLineaNoVacia(const string& msg) {
+    string s;
+    while (true) {
+        cout << msg;
+        getline(cin >> ws, s);
+        if (!s.empty()) return s;
+        cout << "❌ El texto no puede estar vacío.\n";
+    }
+}
+
+static string leerTextoEnConjunto(const string& msg, const vector<string>& opciones) {
+    while (true) {
+        string v = leerLineaNoVacia(msg);
+        string vn = aMinusculas(v);
+
+        for (const auto& op : opciones) {
+            if (vn == aMinusculas(op)) return op; // devolvemos la versión “canónica”
+        }
+        cout << "❌ Opción inválida. Opciones válidas: ";
+        for (size_t i = 0; i < opciones.size(); ++i) {
+            cout << opciones[i] << (i + 1 < opciones.size() ? ", " : "");
+        }
+        cout << "\n";
+    }
+}
+
+// ------------------ Reconstrucción ------------------
+static bool reconstruirEmpatesYDerrotas(Equipo &e) {
+    // Pts = 3*PG + 1*PE  => PE = Pts - 3*PG
+    int emp = e.puntos - 3 * e.partidosGanados;
+    int per = e.partidosJugados - e.partidosGanados - emp;
+
+    if (emp < 0 || per < 0) return false;
+
+    e.partidosEmpatados = emp;
+    e.partidosPerdidos = per;
+    return true;
+}
+
+// ------------------ Impresión tabulada ------------------
+static void imprimirCabecera() {
+    cout << left
+         << setw(4)  << "#"
+         << setw(25) << "Equipo"
+         << right
+         << setw(6)  << "PJ"
+         << setw(6)  << "PG"
+         << setw(6)  << "PE"
+         << setw(6)  << "PP"
+         << setw(8)  << "Pts"
+         << "\n";
+
+    cout << string(4 + 25 + 6 + 6 + 6 + 6 + 8, '-') << "\n";
+}
+
+static void imprimirEquipoFila(const Equipo& e, int pos) {
+    cout << left
+         << setw(4)  << pos
+         << setw(25) << e.nombre
+         << right
+         << setw(6)  << e.partidosJugados
+         << setw(6)  << e.partidosGanados
+         << setw(6)  << e.partidosEmpatados
+         << setw(6)  << e.partidosPerdidos
+         << setw(8)  << e.puntos
+         << "\n";
+}
+
+// ------------------ Opción 1/2: tabla ordenada ------------------
+static void mostrarTablaOrdenada(const Equipo equipos[], int n, bool ascendente) {
+    vector<Equipo> v(equipos, equipos + n);
+
+    sort(v.begin(), v.end(), [ascendente](const Equipo& a, const Equipo& b) {
+        if (a.puntos != b.puntos)
+            return ascendente ? (a.puntos < b.puntos) : (a.puntos > b.puntos);
+        // Desempate por nombre (case-insensitive)
+        return aMinusculas(a.nombre) < aMinusculas(b.nombre);
+    });
+
+    cout << "\n=== TABLA DE POSICIONES (" << (ascendente ? "Menor a mayor" : "Mayor a menor") << ") ===\n";
+    imprimirCabecera();
+    for (int i = 0; i < (int)v.size(); ++i) {
+        imprimirEquipoFila(v[i], i + 1);
+    }
+}
+
+// ------------------ Opción 3: más empates ------------------
+static void mostrarEquipoMasEmpates(const Equipo equipos[], int n) {
+    int maxEmp = -1;
+    for (int i = 0; i < n; i++) maxEmp = max(maxEmp, equipos[i].partidosEmpatados);
+
+    cout << "\n=== EQUIPO(S) CON MÁS EMPATES ===\n";
+    cout << "Máximo de empates: " << maxEmp << "\n\n";
+
+    imprimirCabecera();
+    int pos = 1;
+    for (int i = 0; i < n; i++) {
+        if (equipos[i].partidosEmpatados == maxEmp) {
+            imprimirEquipoFila(equipos[i], pos++);
+        }
+    }
+}
+
+// ------------------ Opción 4: buscar equipo ------------------
+static int buscarEquipoPorNombre(const Equipo equipos[], int n, const string& nombre) {
+    string target = aMinusculas(nombre);
+    for (int i = 0; i < n; i++) {
+        if (aMinusculas(equipos[i].nombre) == target) return i;
+    }
+    return -1;
+}
+
+static void mostrarInfoEquipo(const Equipo equipos[], int n) {
+    string nombre = leerLineaNoVacia("Introduce el nombre exacto del equipo: ");
+    int idx = buscarEquipoPorNombre(equipos, n, nombre);
+
+    if (idx == -1) {
+        cout << "❌ No se encontró el equipo \"" << nombre << "\".\n";
+        return;
+    }
+
+    cout << "\n=== INFORMACIÓN DEL EQUIPO ===\n";
+    imprimirCabecera();
+    imprimirEquipoFila(equipos[idx], 1);
+}
+
+// ------------------ Validación de consistencia (REQUISITO) ------------------
+static bool datosConsistentes(const Equipo& e) {
+    if (e.partidosJugados < 0 || e.partidosGanados < 0 || e.partidosEmpatados < 0 || e.partidosPerdidos < 0 || e.puntos < 0)
+        return false;
+
+    if (e.puntos != (3 * e.partidosGanados + 1 * e.partidosEmpatados))
+        return false;
+
+    if (e.partidosJugados != (e.partidosGanados + e.partidosEmpatados + e.partidosPerdidos))
+        return false;
+
+    return true;
+}
+
+// ------------------ Opción 5: agregar equipo ------------------
+static void agregarEquipo(Equipo equipos[], int &n, int &nuevosAgregados) {
+    if (nuevosAgregados >= MAX_NUEVOS) {
+        cout << "⚠️ No se pueden agregar más de " << MAX_NUEVOS << " equipos nuevos.\n";
+        return;
+    }
+    if (n >= MAX_EQUIPOS) {
+        cout << "⚠️ Capacidad máxima alcanzada.\n";
+        return;
+    }
+
+    Equipo e;
+    e.nombre = leerLineaNoVacia("Nombre del nuevo equipo: ");
+
+    if (buscarEquipoPorNombre(equipos, n, e.nombre) != -1) {
+        cout << "⚠️ Ya existe un equipo con ese nombre. No se guardará.\n";
+        return;
+    }
+
+    e.partidosJugados   = leerEnteroNoNeg("Partidos jugados (PJ): ");
+    e.partidosGanados   = leerEnteroNoNeg("Partidos ganados (PG): ");
+    e.partidosEmpatados = leerEnteroNoNeg("Partidos empatados (PE): ");
+    e.partidosPerdidos  = leerEnteroNoNeg("Partidos perdidos (PP): ");
+    e.puntos            = leerEnteroNoNeg("Puntos (Pts): ");
+
+    if (!datosConsistentes(e)) {
+        cout << "\n❌ Datos inconsistentes. No se guardará el equipo.\n";
+        cout << "Reglas:\n";
+        cout << " - Pts debe ser 3*PG + 1*PE\n";
+        cout << " - PJ debe ser PG + PE + PP\n";
+        return;
+    }
+
+    equipos[n] = e;
+    n++;
+    nuevosAgregados++;
+    cout << "✅ Equipo agregado correctamente.\n";
+}
+
+// ------------------ Menú ------------------
+static void mostrarMenu() {
+    cout << "\n===== MENÚ TORNEO INTERGALÁCTICO =====\n";
+    cout << "1) Mostrar tabla por puntos (mayor -> menor)\n";
+    cout << "2) Mostrar tabla por puntos (menor -> mayor)\n";
+    cout << "3) Mostrar equipo(s) con más empates\n";
+    cout << "4) Buscar equipo y mostrar su información\n";
+    cout << "5) Agregar nuevo equipo (máx 4)\n";
+    cout << "0) Salir\n";
+}
+
+int main() {
+    Equipo equipos[MAX_EQUIPOS] = {
+        {"Andrómeda FC",12,4,0,0,13},
+        {"Vulcano Academia",11,2,0,0,10},
+        {"Orión Confederación",11,4,0,0,14},
+        {"Sirio Estrellas",10,6,0,0,20},
+        {"Caronte Titanes",11,1,0,0,6},
+        {"Quíron Cometas",10,5,0,0,17},
+        {"Pegaso Púlsares",11,7,0,0,24},
+        {"Osos Cósmicos",11,5,0,0,18},
+        {"Vía Láctea Nómadas",11,6,0,0,20},
+        {"Leónidas FC",11,5,0,0,16},
+        {"Cangrejo Fortaleza",11,4,0,0,16},
+        {"Cefeo Cúmulo",11,3,0,0,14},
+        {"Atlético Interestelar",11,4,0,0,16},
+        {"Deportivo Galáctico",11,2,0,0,8},
+        {"Estrella Estelar",11,5,0,0,17},
+        {"Inter Galaxia",10,2,0,0,10}
+    };
+
+    int n = INICIALES;
+    int nuevosAgregados = 0;
+
+    // Reconstruir PE y PP para datos iniciales
+    for (int i = 0; i < n; i++) {
+        bool ok = reconstruirEmpatesYDerrotas(equipos[i]);
+        if (!ok) {
+            cout << "⚠️ Advertencia: no se pudo reconstruir datos para " << equipos[i].nombre
+                 << " (valores no lógicos). Se mantienen PE/PP en 0.\n";
+        }
+    }
+
+    while (true) {
+        mostrarMenu();
+        int op = leerOpcionEnRango("Elige una opción: ", 0, 5);
+
+        switch (op) {
+            case 1:
+                mostrarTablaOrdenada(equipos, n, false);
+                break;
+            case 2:
+                mostrarTablaOrdenada(equipos, n, true);
+                break;
+            case 3:
+                mostrarEquipoMasEmpates(equipos, n);
+                break;
+            case 4:
+                mostrarInfoEquipo(equipos, n);
+                break;
+            case 5:
+                agregarEquipo(equipos, n, nuevosAgregados);
+                break;
+            case 0:
+                cout << "¡Hasta luego!\n";
+                return 0;
+        }
+    }
+}
+
